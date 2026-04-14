@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Real-time hand gesture recognition using ml5.js handPose and your webcam">
+    <title>✋ Gesture Sense — Hand Gesture Recognition</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- ml5.js (includes TensorFlow.js under the hood) -->
+    <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
+
+    <style>
+        /* ============================================
+           DESIGN SYSTEM
+           ============================================ */
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: rgba(255, 255, 255, 0.04);
+            --bg-card-hover: rgba(255, 255, 255, 0.07);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(139, 92, 246, 0.3);
+
+            --text-primary: #f0f0f5;
+            --text-secondary: #8a8a9a;
+            --text-muted: #55556a;
+
+            --accent-purple: #8b5cf6;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-pink: #ec4899;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+
+            --gradient-main: linear-gradient(135deg, #8b5cf6, #3b82f6, #06b6d4);
+            --gradient-warm: linear-gradient(135deg, #ec4899, #f59e0b);
+            --gradient-cool: linear-gradient(135deg, #06b6d4, #10b981);
+
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 20px;
+            --radius-xl: 28px;
+
+            --shadow-glow: 0 0 40px rgba(139, 92, 246, 0.15);
+            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
+
+            --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* ============================================
+           RESET & BASE
+           ============================================ */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* ============================================
+           AMBIENT BACKGROUND
+           ============================================ */
+        .ambient-bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .ambient-bg .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.15;
+            animation: float 20s ease-in-out infinite;
+        }
+
+        .ambient-bg .orb:nth-child(1) {
+            width: 500px;
+            height: 500px;
+            background: var(--accent-purple);
+            top: -10%;
+            left: -10%;
+        }
+
+        .ambient-bg .orb:nth-child(2) {
+            width: 400px;
+            height: 400px;
+            background: var(--accent-blue);
+            top: 50%;
+            right: -10%;
+            animation-delay: -7s;
+        }
+
+        .ambient-bg .orb:nth-child(3) {
+            width: 350px;
+            height: 350px;
+            background: var(--accent-cyan);
+            bottom: -10%;
+            left: 30%;
+            animation-delay: -14s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(30px, -40px) scale(1.05); }
+            50% { transform: translate(-20px, 20px) scale(0.95); }
+            75% { transform: translate(40px, 30px) scale(1.03); }
+        }
+
+        /* ============================================
+           LAYOUT
+           ============================================ */
+        .app-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 24px 60px;
+        }
+
+        /* ============================================
+           HEADER
+           ============================================ */
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 16px;
+            border-radius: 100px;
+            background: rgba(139, 92, 246, 0.12);
+            border: 1px solid rgba(139, 92, 246, 0.25);
+            color: var(--accent-purple);
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        .header .badge .dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .header h1 {
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-weight: 800;
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* ============================================
+           MAIN CONTENT GRID
+           ============================================ */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ============================================
+           CARDS — SHARED
+           ============================================ */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            transition: border-color 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--border-glow);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .card-header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-header-left .icon { font-size: 1.1rem; }
+
+        .card-header-left .title {
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .status-indicator.active {
+            color: var(--accent-green);
+        }
+
+        .status-indicator .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+
+        .status-indicator.active .status-dot {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* ============================================
+           CAMERA FEED
+           ============================================ */
+        .camera-viewport {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #outputCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+        }
+
+        #webcamVideo {
+            display: none;
+        }
+
+        .camera-placeholder {
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .camera-placeholder .cam-icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            opacity: 0.4;
+        }
+
+        .camera-placeholder p { font-size: 0.9rem; }
+
+        .start-btn-wrapper {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 28px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-main);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--gradient-main);
+            color: white;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-primary:active { transform: translateY(0); }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ============================================
+           GESTURE RESULT DISPLAY
+           ============================================ */
+        .right-col {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* ============================================
+           BOTTLE CANVAS
+           ============================================ */
+        .bottle-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            position: relative;
+        }
+
+        #bottleCanvas {
+            width: 100%;
+            max-width: 320px;
+            aspect-ratio: 3 / 4;
+            border-radius: var(--radius-md);
+        }
+
+        .bottle-gesture-label {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .bottle-gesture-label .gesture-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .bottle-gesture-label .gesture-sub {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        /* ============================================
+           FINGER STATUS TABLE
+           ============================================ */
+        .finger-status {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .finger-status-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .finger-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0;
+        }
+
+        .finger-row:not(:last-child) {
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+
+        .finger-name {
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .finger-state {
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 100px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .finger-state.up {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-green);
+        }
+
+        .finger-state.down {
+            background: rgba(239, 68, 68, 0.12);
+            color: var(--accent-red);
+        }
+
+        /* ============================================
+           GESTURE GALLERY
+           ============================================ */
+        .gesture-gallery {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            transition: border-color 0.3s ease;
+        }
+
+        .gesture-gallery:hover {
+            border-color: var(--border-glow);
+        }
+
+        .gallery-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .gesture-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+        }
+
+        .gesture-tile {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 18px 12px;
+            text-align: center;
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .gesture-tile.active {
+            border-color: var(--accent-purple);
+            background: rgba(139, 92, 246, 0.1);
+            box-shadow: 0 0 25px rgba(139, 92, 246, 0.2);
+            transform: scale(1.08);
+        }
+
+        .gesture-tile .tile-emoji {
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .gesture-tile .tile-name {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .gesture-tile.active .tile-name {
+            color: var(--text-primary);
+        }
+
+        .gesture-tile .tile-fingers {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* ============================================
+           PARTICLE EFFECTS
+           ============================================ */
+        .particle-container {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 100;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            font-size: 1.5rem;
+            animation: particleFly 1.5s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes particleFly {
+            0% {
+                opacity: 1;
+                transform: translate(0, 0) scale(1) rotate(0deg);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(var(--dx), var(--dy)) scale(0.3) rotate(360deg);
+            }
+        }
+
+        /* ============================================
+           TOAST NOTIFICATIONS
+           ============================================ */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(18, 18, 26, 0.92);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 12px 24px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            z-index: 1000;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: var(--shadow-card);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.success { border-color: rgba(16, 185, 129, 0.4); }
+        .toast.error { border-color: rgba(239, 68, 68, 0.4); }
+
+        /* ============================================
+           LOADING OVERLAY
+           ============================================ */
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 10, 15, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            gap: 16px;
+        }
+
+        .loading-overlay.hidden { display: none; }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(139, 92, 246, 0.2);
+            border-top-color: var(--accent-purple);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-text {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* ============================================
+           FOOTER
+           ============================================ */
+        .footer {
+            text-align: center;
+            padding-top: 40px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .footer a {
+            color: var(--accent-purple);
+            text-decoration: none;
+        }
+
+        .footer a:hover { text-decoration: underline; }
+
+        /* ============================================
+           HAND COUNTER / STATS BAR
+           ============================================ */
+        .stats-bar {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .stat-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 100px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .stat-chip .stat-value {
+            color: var(--text-primary);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Ambient Background -->
+    <div class="ambient-bg">
+        <div class="orb"></div>
+        <div class="orb"></div>
+        <div class="orb"></div>
+    </div>
+
+    <!-- Particle Container -->
+    <div class="particle-container" id="particleContainer"></div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="badge">
+                <span class="dot"></span>
+                ml5.js × HandPose AI
+            </div>
+            <h1>✋ Gesture Sense</h1>
+            <p>Real-time hand gesture recognition powered by ml5.js — no training needed, just show your hand!</p>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar" id="statsBar">
+            <div class="stat-chip">
+                🤖 Model: <span class="stat-value" id="modelStatusText">Not loaded</span>
+            </div>
+            <div class="stat-chip">
+                🖐️ Hands detected: <span class="stat-value" id="handCount">0</span>
+            </div>
+            <div class="stat-chip">
+                🎯 Gesture: <span class="stat-value" id="currentGestureChip">None</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-grid">
+            <!-- Camera Feed -->
+            <div class="card" id="cameraCard">
+                <div class="card-header">
+                    <div class="card-header-left">
+                        <span class="icon">📹</span>
+                        <span class="title">Live Camera Feed</span>
+                    </div>
+                    <div class="status-indicator" id="cameraStatus">
+                        <div class="status-dot"></div>
+                        <span>Offline</span>
+                    </div>
+                </div>
+                <div class="camera-viewport" id="cameraViewport">
+                    <video id="webcamVideo" autoplay playsinline></video>
+                    <canvas id="outputCanvas"></canvas>
+
+                    <div class="camera-placeholder" id="cameraPlaceholder">
+                        <div class="cam-icon">📷</div>
+                        <p>Click the button below to start</p>
+                    </div>
+
+                    <div class="loading-overlay hidden" id="loadingOverlay">
+                        <div class="spinner"></div>
+                        <div class="loading-text">Loading HandPose model…</div>
+                    </div>
+                </div>
+                <div class="start-btn-wrapper" id="startBtnWrapper">
+                    <button class="btn btn-primary" id="startBtn" onclick="startApp()">
+                        🚀 Start Camera & Model
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="right-col">
+                <!-- Bottle Man -->
+                <div class="card" style="flex:1;">
+                    <div class="card-header">
+                        <div class="card-header-left">
+                            <span class="icon">🧪</span>
+                            <span class="title">Bottle Guy</span>
+                        </div>
+                    </div>
+                    <div class="bottle-wrapper">
+                        <canvas id="bottleCanvas" width="320" height="420"></canvas>
+                        <div class="bottle-gesture-label">
+                            <div class="gesture-name" id="bottleGestureName">Idle</div>
+                            <div class="gesture-sub" id="bottleGestureSub">Show a gesture to interact!</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Finger Status -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-header-left">
+                            <span class="icon">🖐️</span>
+                            <span class="title">Finger Status</span>
+                        </div>
+                    </div>
+                    <div class="finger-status" id="fingerStatus">
+                        <div class="finger-row">
+                            <span class="finger-name">👍 Thumb</span>
+                            <span class="finger-state down" id="finger-thumb">DOWN</span>
+                        </div>
+                        <div class="finger-row">
+                            <span class="finger-name">☝️ Index</span>
+                            <span class="finger-state down" id="finger-index">DOWN</span>
+                        </div>
+                        <div class="finger-row">
+                            <span class="finger-name">🖕 Middle</span>
+                            <span class="finger-state down" id="finger-middle">DOWN</span>
+                        </div>
+                        <div class="finger-row">
+                            <span class="finger-name">💍 Ring</span>
+                            <span class="finger-state down" id="finger-ring">DOWN</span>
+                        </div>
+                        <div class="finger-row">
+                            <span class="finger-name">🤙 Pinky</span>
+                            <span class="finger-state down" id="finger-pinky">DOWN</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gesture Gallery -->
+        <div class="gesture-gallery">
+            <div class="gallery-title">🎨 Recognized Gestures</div>
+            <div class="gesture-grid" id="gestureGrid">
+                <div class="gesture-tile" id="tile-open-hand">
+                    <span class="tile-emoji">🖐️</span>
+                    <span class="tile-name">Open Hand</span>
+                    <span class="tile-fingers">All fingers up</span>
+                </div>
+                <div class="gesture-tile" id="tile-fist">
+                    <span class="tile-emoji">✊</span>
+                    <span class="tile-name">Fist</span>
+                    <span class="tile-fingers">All fingers down</span>
+                </div>
+                <div class="gesture-tile" id="tile-peace">
+                    <span class="tile-emoji">✌️</span>
+                    <span class="tile-name">Peace</span>
+                    <span class="tile-fingers">Index + Middle</span>
+                </div>
+                <div class="gesture-tile" id="tile-thumbs-up">
+                    <span class="tile-emoji">👍</span>
+                    <span class="tile-name">Thumbs Up</span>
+                    <span class="tile-fingers">Only thumb up</span>
+                </div>
+                <div class="gesture-tile" id="tile-pointing">
+                    <span class="tile-emoji">☝️</span>
+                    <span class="tile-name">Pointing</span>
+                    <span class="tile-fingers">Only index up</span>
+                </div>
+                <div class="gesture-tile" id="tile-rock">
+                    <span class="tile-emoji">🤘</span>
+                    <span class="tile-name">Rock On</span>
+                    <span class="tile-fingers">Index + Pinky</span>
+                </div>
+                <div class="gesture-tile" id="tile-three">
+                    <span class="tile-emoji">🤟</span>
+                    <span class="tile-name">I Love You</span>
+                    <span class="tile-fingers">Thumb + Index + Pinky</span>
+                </div>
+                <div class="gesture-tile" id="tile-ok">
+                    <span class="tile-emoji">👌</span>
+                    <span class="tile-name">OK</span>
+                    <span class="tile-fingers">Thumb–Index pinch</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Built with ❤️ using <a href="https://ml5js.org/" target="_blank">ml5.js</a> HandPose &amp; <a href="https://www.tensorflow.org/js" target="_blank">TensorFlow.js</a></p>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // STATE
+        // ============================================
+        let handPose;
+        let video;
+        let canvas, ctx;
+        let hands = [];
+        let lastGesture = '';
+        let lastGestureTime = 0;
+        let isRunning = false;
+
+        // ============================================
+        // GESTURE DEFINITIONS
+        // ============================================
+        /*
+            MediaPipe Hand Landmarks (21 keypoints):
+            0: Wrist
+            1-4:   Thumb   (CMC, MCP, IP, TIP)
+            5-8:   Index   (MCP, PIP, DIP, TIP)
+            9-12:  Middle  (MCP, PIP, DIP, TIP)
+            13-16: Ring    (MCP, PIP, DIP, TIP)
+            17-20: Pinky   (MCP, PIP, DIP, TIP)
+        */
+
+        const FINGER_TIPS  = [4, 8, 12, 16, 20];
+        const FINGER_PIPS  = [3, 6, 10, 14, 18];
+        const FINGER_MCPS  = [2, 5, 9, 13, 17];
+        const FINGER_NAMES = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+
+        // ============================================
+        // GESTURE DETECTION
+        // ============================================
+
+        // Check if a finger is extended
+        function isFingerUp(keypoints, fingerIndex) {
+            const tip = keypoints[FINGER_TIPS[fingerIndex]];
+            const pip = keypoints[FINGER_PIPS[fingerIndex]];
+            const mcp = keypoints[FINGER_MCPS[fingerIndex]];
+
+            if (fingerIndex === 0) {
+                // Thumb: compare x distance from wrist (works for both hands)
+                const wrist = keypoints[0];
+                const thumbTip = keypoints[4];
+                const thumbMcp = keypoints[2];
+                // Thumb is "up" if the tip is farther from the wrist horizontally than the MCP
+                return Math.abs(thumbTip.x - wrist.x) > Math.abs(thumbMcp.x - wrist.x) * 1.2;
+            } else {
+                // Other fingers: tip is above (lower y) the PIP joint
+                return tip.y < pip.y;
+            }
+        }
+
+        function getFingerStates(keypoints) {
+            return FINGER_NAMES.map((name, i) => ({
+                name: name,
+                up: isFingerUp(keypoints, i)
+            }));
+        }
+
+        function detectGesture(keypoints) {
+            const fingers = getFingerStates(keypoints);
+            const up = fingers.map(f => f.up);
+            const [thumb, index, middle, ring, pinky] = up;
+
+            const allUp = up.every(Boolean);
+            const allDown = up.every(f => !f);
+            const upCount = up.filter(Boolean).length;
+
+            // Check for OK sign (thumb tip close to index tip)
+            const thumbTip = keypoints[4];
+            const indexTip = keypoints[8];
+            const dist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+            const wrist = keypoints[0];
+            const middleMcp = keypoints[9];
+            const handSize = Math.hypot(wrist.x - middleMcp.x, wrist.y - middleMcp.y);
+            const isOK = dist < handSize * 0.3 && middle && ring && pinky;
+
+            if (isOK) return { name: 'OK', emoji: '👌', id: 'ok', fingers };
+            if (allUp) return { name: 'Open Hand', emoji: '🖐️', id: 'open-hand', fingers };
+            if (allDown || upCount === 0) return { name: 'Fist', emoji: '✊', id: 'fist', fingers };
+            if (index && middle && !ring && !pinky) return { name: 'Peace', emoji: '✌️', id: 'peace', fingers };
+            if (thumb && !index && !middle && !ring && !pinky) return { name: 'Thumbs Up', emoji: '👍', id: 'thumbs-up', fingers };
+            if (!thumb && index && !middle && !ring && !pinky) return { name: 'Pointing', emoji: '☝️', id: 'pointing', fingers };
+            if (index && !middle && !ring && pinky) return { name: 'Rock On', emoji: '🤘', id: 'rock', fingers };
+            if (thumb && index && !middle && !ring && pinky) return { name: 'I Love You', emoji: '🤟', id: 'three', fingers };
+            if (index && middle && ring && !pinky) return { name: 'Three', emoji: '🤟', id: 'three', fingers };
+
+            return { name: 'Unknown', emoji: '❓', id: null, fingers };
+        }
+
+        // ============================================
+        // DRAWING
+        // ============================================
+
+        // Color palette for hand skeleton
+        const SKELETON_COLORS = [
+            '#8b5cf6', // thumb  — purple
+            '#3b82f6', // index  — blue
+            '#06b6d4', // middle — cyan
+            '#10b981', // ring   — green
+            '#f59e0b', // pinky  — amber
+        ];
+
+        const CONNECTIONS = [
+            // Thumb
+            [0,1],[1,2],[2,3],[3,4],
+            // Index
+            [0,5],[5,6],[6,7],[7,8],
+            // Middle
+            [0,9],[9,10],[10,11],[11,12],
+            // Ring
+            [0,13],[13,14],[14,15],[15,16],
+            // Pinky
+            [0,17],[17,18],[18,19],[19,20],
+            // Palm
+            [5,9],[9,13],[13,17]
+        ];
+
+        function getFingerIndexForConnection(a, b) {
+            if ([1,2,3,4].includes(a) || [1,2,3,4].includes(b)) return 0;
+            if ([5,6,7,8].includes(a) || [5,6,7,8].includes(b)) return 1;
+            if ([9,10,11,12].includes(a) || [9,10,11,12].includes(b)) return 2;
+            if ([13,14,15,16].includes(a) || [13,14,15,16].includes(b)) return 3;
+            if ([17,18,19,20].includes(a) || [17,18,19,20].includes(b)) return 4;
+            return 2; // default cyan for palm connections
+        }
+
+        function drawHand(keypoints) {
+            // Draw skeleton lines
+            for (const [a, b] of CONNECTIONS) {
+                const ptA = keypoints[a];
+                const ptB = keypoints[b];
+                const colorIdx = getFingerIndexForConnection(a, b);
+
+                ctx.beginPath();
+                ctx.moveTo(ptA.x, ptA.y);
+                ctx.lineTo(ptB.x, ptB.y);
+                ctx.strokeStyle = SKELETON_COLORS[colorIdx];
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.globalAlpha = 0.8;
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+            }
+
+            // Draw keypoints
+            for (let i = 0; i < keypoints.length; i++) {
+                const kp = keypoints[i];
+                let colorIdx;
+                if (i <= 4) colorIdx = 0;
+                else if (i <= 8) colorIdx = 1;
+                else if (i <= 12) colorIdx = 2;
+                else if (i <= 16) colorIdx = 3;
+                else colorIdx = 4;
+
+                const isTip = FINGER_TIPS.includes(i);
+                const radius = isTip ? 7 : 4;
+
+                // Glow for fingertips
+                if (isTip) {
+                    ctx.beginPath();
+                    ctx.arc(kp.x, kp.y, 14, 0, Math.PI * 2);
+                    const glow = ctx.createRadialGradient(kp.x, kp.y, 0, kp.x, kp.y, 14);
+                    glow.addColorStop(0, SKELETON_COLORS[colorIdx] + '60');
+                    glow.addColorStop(1, 'transparent');
+                    ctx.fillStyle = glow;
+                    ctx.fill();
+                }
+
+                ctx.beginPath();
+                ctx.arc(kp.x, kp.y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                ctx.strokeStyle = SKELETON_COLORS[colorIdx];
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        // ============================================
+        // UI UPDATES
+        // ============================================
+
+        function updateFingerStatusUI(fingers) {
+            for (const f of fingers) {
+                const el = document.getElementById(`finger-${f.name}`);
+                if (el) {
+                    el.textContent = f.up ? 'UP' : 'DOWN';
+                    el.className = 'finger-state ' + (f.up ? 'up' : 'down');
+                }
+            }
+        }
+
+        function updateGestureDisplay(gesture) {
+            const now = Date.now();
+            const isNew = gesture.name !== lastGesture;
+
+            // Update bottle man's current gesture
+            bottleGesture = gesture.id || 'idle';
+
+            // Update labels
+            document.getElementById('bottleGestureName').textContent = gesture.name;
+            const subtexts = {
+                'open-hand': '"Heeey! High five!"',
+                'fist': '"Let\'s GOOO!" 👊',
+                'peace': '"Peace out, dude!" ✌️',
+                'thumbs-up': '"You\'re awesome!"',
+                'pointing': '"What\'s up there?!"',
+                'rock': '"🎸 ROCK AND ROLL!"',
+                'three': '"I love you too!" 💕',
+                'ok': '"Everything\'s A-OK!"',
+            };
+            document.getElementById('bottleGestureSub').textContent = subtexts[gesture.id] || '"Tap the glass..."';
+
+            // Update tiles
+            document.querySelectorAll('.gesture-tile').forEach(t => t.classList.remove('active'));
+            if (gesture.id) {
+                const tile = document.getElementById(`tile-${gesture.id}`);
+                if (tile) tile.classList.add('active');
+            }
+
+            // Stats chip
+            document.getElementById('currentGestureChip').textContent = gesture.name;
+
+            // Particles on gesture change
+            if (isNew && now - lastGestureTime > 600) {
+                spawnParticles(gesture.emoji, 10);
+                lastGesture = gesture.name;
+                lastGestureTime = now;
+            }
+        }
+
+        // ============================================
+        // BOTTLE MAN — CANVAS ANIMATION
+        // ============================================
+        let bottleCanvas, bCtx;
+        let bottleGesture = 'idle';
+        let bottleFrame = 0;
+
+        function initBottleMan() {
+            bottleCanvas = document.getElementById('bottleCanvas');
+            bCtx = bottleCanvas.getContext('2d');
+            animateBottleMan();
+        }
+
+        function animateBottleMan() {
+            bottleFrame++;
+            const W = bottleCanvas.width;
+            const H = bottleCanvas.height;
+            bCtx.clearRect(0, 0, W, H);
+
+            // Draw bottle
+            drawBottle(W, H);
+
+            // Draw stick figure inside bottle
+            drawStickMan(W, H, bottleGesture, bottleFrame);
+
+            // Draw floating effects
+            drawEffects(W, H, bottleGesture, bottleFrame);
+
+            requestAnimationFrame(animateBottleMan);
+        }
+
+        function drawBottle(W, H) {
+            const cx = W / 2;
+            const bottleW = W * 0.55;
+            const bottleH = H * 0.7;
+            const neckW = W * 0.2;
+            const neckH = H * 0.15;
+            const bottleTop = H * 0.18;
+            const bottleBottom = bottleTop + bottleH;
+            const radius = 20;
+
+            bCtx.save();
+
+            // Bottle body (glass effect)
+            bCtx.beginPath();
+            // Neck
+            bCtx.moveTo(cx - neckW / 2, bottleTop - neckH);
+            bCtx.lineTo(cx - neckW / 2, bottleTop);
+            // Left shoulder curve
+            bCtx.quadraticCurveTo(cx - bottleW / 2, bottleTop, cx - bottleW / 2, bottleTop + radius * 2);
+            // Left side
+            bCtx.lineTo(cx - bottleW / 2, bottleBottom - radius);
+            // Bottom left corner
+            bCtx.quadraticCurveTo(cx - bottleW / 2, bottleBottom, cx - bottleW / 2 + radius, bottleBottom);
+            // Bottom
+            bCtx.lineTo(cx + bottleW / 2 - radius, bottleBottom);
+            // Bottom right corner
+            bCtx.quadraticCurveTo(cx + bottleW / 2, bottleBottom, cx + bottleW / 2, bottleBottom - radius);
+            // Right side
+            bCtx.lineTo(cx + bottleW / 2, bottleTop + radius * 2);
+            // Right shoulder curve
+            bCtx.quadraticCurveTo(cx + bottleW / 2, bottleTop, cx + neckW / 2, bottleTop);
+            // Right neck
+            bCtx.lineTo(cx + neckW / 2, bottleTop - neckH);
+
+            // Glass fill
+            bCtx.fillStyle = 'rgba(139, 92, 246, 0.04)';
+            bCtx.fill();
+
+            // Glass outline
+            bCtx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
+            bCtx.lineWidth = 2;
+            bCtx.stroke();
+
+            // Glass shine (left)
+            bCtx.beginPath();
+            bCtx.moveTo(cx - bottleW / 2 + 8, bottleTop + 40);
+            bCtx.lineTo(cx - bottleW / 2 + 8, bottleBottom - 30);
+            bCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            bCtx.lineWidth = 3;
+            bCtx.stroke();
+
+            // Cork / cap
+            bCtx.fillStyle = 'rgba(245, 158, 11, 0.6)';
+            bCtx.fillRect(cx - neckW / 2 - 2, bottleTop - neckH - 8, neckW + 4, 12);
+            bCtx.strokeStyle = 'rgba(245, 158, 11, 0.3)';
+            bCtx.lineWidth = 1;
+            bCtx.strokeRect(cx - neckW / 2 - 2, bottleTop - neckH - 8, neckW + 4, 12);
+
+            bCtx.restore();
+        }
+
+        function drawStickMan(W, H, gesture, frame) {
+            const cx = W / 2;
+            const groundY = H * 0.82;
+            const headY = H * 0.42;
+            const bodyTop = headY + 18;
+            const bodyBottom = groundY - 40;
+            const hipY = bodyBottom;
+            const headR = 14;
+
+            bCtx.save();
+            bCtx.lineCap = 'round';
+            bCtx.lineJoin = 'round';
+
+            // Animation vars
+            const t = frame * 0.05;
+            const bounce = Math.sin(t * 2) * 2;
+            const breathe = Math.sin(t) * 1;
+
+            // Body color
+            const bodyColor = '#e0e0f0';
+            bCtx.strokeStyle = bodyColor;
+            bCtx.fillStyle = bodyColor;
+            bCtx.lineWidth = 3;
+
+            // === LEGS ===
+            let leftFootX, leftFootY, leftKneeX, leftKneeY;
+            let rightFootX, rightFootY, rightKneeX, rightKneeY;
+
+            if (gesture === 'rock') {
+                // Rocking stance — legs apart
+                const rockBounce = Math.sin(t * 4) * 3;
+                leftKneeX = cx - 14; leftKneeY = hipY + 18 + rockBounce;
+                leftFootX = cx - 20; leftFootY = groundY;
+                rightKneeX = cx + 14; rightKneeY = hipY + 18 + rockBounce;
+                rightFootX = cx + 20; rightFootY = groundY;
+            } else if (gesture === 'fist') {
+                // Pumping — slight jump
+                const jumpPhase = Math.sin(t * 6) * 4;
+                leftKneeX = cx - 8; leftKneeY = hipY + 16 - Math.abs(jumpPhase);
+                leftFootX = cx - 10; leftFootY = groundY - Math.abs(jumpPhase);
+                rightKneeX = cx + 8; rightKneeY = hipY + 16 - Math.abs(jumpPhase);
+                rightFootX = cx + 10; rightFootY = groundY - Math.abs(jumpPhase);
+            } else {
+                // Normal standing
+                leftKneeX = cx - 8; leftKneeY = hipY + 20 + breathe;
+                leftFootX = cx - 12; leftFootY = groundY;
+                rightKneeX = cx + 8; rightKneeY = hipY + 20 + breathe;
+                rightFootX = cx + 12; rightFootY = groundY;
+            }
+
+            // Draw legs
+            bCtx.beginPath();
+            bCtx.moveTo(cx, hipY);
+            bCtx.lineTo(leftKneeX, leftKneeY);
+            bCtx.lineTo(leftFootX, leftFootY);
+            bCtx.stroke();
+
+            bCtx.beginPath();
+            bCtx.moveTo(cx, hipY);
+            bCtx.lineTo(rightKneeX, rightKneeY);
+            bCtx.lineTo(rightFootX, rightFootY);
+            bCtx.stroke();
+
+            // === BODY (spine) ===
+            const actualBodyTop = bodyTop + bounce;
+            bCtx.beginPath();
+            bCtx.moveTo(cx, hipY);
+            bCtx.lineTo(cx, actualBodyTop);
+            bCtx.stroke();
+
+            // === ARMS ===
+            const shoulderY = actualBodyTop + 5;
+
+            drawArms(cx, shoulderY, gesture, frame, t);
+
+            // === HEAD ===
+            const actualHeadY = headY + bounce;
+            bCtx.beginPath();
+            bCtx.arc(cx, actualHeadY, headR, 0, Math.PI * 2);
+            bCtx.stroke();
+
+            // Eyes
+            const eyeOffsetX = 4;
+            const eyeY = actualHeadY - 2;
+            bCtx.fillStyle = bodyColor;
+
+            if (gesture === 'pointing') {
+                // Looking up
+                bCtx.fillRect(cx - eyeOffsetX - 1.5, eyeY - 4, 3, 3);
+                bCtx.fillRect(cx + eyeOffsetX - 1.5, eyeY - 4, 3, 3);
+            } else if (gesture === 'rock') {
+                // Excited X eyes
+                drawX(cx - eyeOffsetX, eyeY, 3);
+                drawX(cx + eyeOffsetX, eyeY, 3);
+            } else {
+                // Normal dot eyes
+                bCtx.fillRect(cx - eyeOffsetX - 1, eyeY - 1, 2.5, 2.5);
+                bCtx.fillRect(cx + eyeOffsetX - 1, eyeY - 1, 2.5, 2.5);
+            }
+
+            // Mouth
+            if (gesture === 'rock' || gesture === 'fist') {
+                // Open mouth (excited)
+                bCtx.beginPath();
+                bCtx.arc(cx, actualHeadY + 5, 4, 0, Math.PI);
+                bCtx.stroke();
+            } else if (gesture === 'three') {
+                // Happy smile
+                bCtx.beginPath();
+                bCtx.arc(cx, actualHeadY + 3, 5, 0.1, Math.PI - 0.1);
+                bCtx.stroke();
+            } else if (gesture === 'open-hand') {
+                // Big smile
+                bCtx.beginPath();
+                bCtx.arc(cx, actualHeadY + 3, 5, 0, Math.PI);
+                bCtx.stroke();
+            } else {
+                // Neutral line
+                bCtx.beginPath();
+                bCtx.moveTo(cx - 4, actualHeadY + 5);
+                bCtx.lineTo(cx + 4, actualHeadY + 5);
+                bCtx.stroke();
+            }
+
+            bCtx.restore();
+        }
+
+        function drawX(x, y, s) {
+            bCtx.beginPath();
+            bCtx.moveTo(x - s, y - s);
+            bCtx.lineTo(x + s, y + s);
+            bCtx.moveTo(x + s, y - s);
+            bCtx.lineTo(x - s, y + s);
+            bCtx.lineWidth = 1.5;
+            bCtx.stroke();
+            bCtx.lineWidth = 3;
+        }
+
+        function drawArms(cx, shoulderY, gesture, frame, t) {
+            switch (gesture) {
+                case 'open-hand':
+                    // Waving both arms up
+                    const waveAngle = Math.sin(t * 5) * 0.3;
+                    // Left arm waving
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 25, shoulderY - 15);
+                    bCtx.lineTo(cx - 30 + Math.sin(t * 6) * 8, shoulderY - 40);
+                    bCtx.stroke();
+                    // Right arm waving
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 25, shoulderY - 15);
+                    bCtx.lineTo(cx + 30 + Math.sin(t * 6 + 1) * 8, shoulderY - 40);
+                    bCtx.stroke();
+                    // Tiny hands open
+                    drawOpenHand(cx - 30 + Math.sin(t * 6) * 8, shoulderY - 42, -1);
+                    drawOpenHand(cx + 30 + Math.sin(t * 6 + 1) * 8, shoulderY - 42, 1);
+                    break;
+
+                case 'fist':
+                    // Fist pump — one arm pumping up and down
+                    const pumpY = Math.sin(t * 6) * 20;
+                    // Left arm relaxed
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 18, shoulderY + 15);
+                    bCtx.lineTo(cx - 14, shoulderY + 30);
+                    bCtx.stroke();
+                    // Right arm pumping
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 15, shoulderY - 10);
+                    bCtx.lineTo(cx + 18, shoulderY - 35 + pumpY);
+                    bCtx.stroke();
+                    // Fist circle
+                    bCtx.beginPath();
+                    bCtx.arc(cx + 18, shoulderY - 39 + pumpY, 5, 0, Math.PI * 2);
+                    bCtx.fill();
+                    break;
+
+                case 'peace':
+                    // Holding up peace sign with right hand
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 20, shoulderY + 12);
+                    bCtx.lineTo(cx - 16, shoulderY + 28);
+                    bCtx.stroke();
+                    // Right arm up
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 22, shoulderY - 15);
+                    bCtx.lineTo(cx + 25, shoulderY - 35);
+                    bCtx.stroke();
+                    // Peace V fingers
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx + 25, shoulderY - 37);
+                    bCtx.lineTo(cx + 20, shoulderY - 50);
+                    bCtx.stroke();
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx + 25, shoulderY - 37);
+                    bCtx.lineTo(cx + 32, shoulderY - 50);
+                    bCtx.stroke();
+                    break;
+
+                case 'thumbs-up':
+                    // Right arm out with thumbs up
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 18, shoulderY + 15);
+                    bCtx.lineTo(cx - 14, shoulderY + 28);
+                    bCtx.stroke();
+                    // Right arm up
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 20, shoulderY - 12);
+                    bCtx.lineTo(cx + 22, shoulderY - 30);
+                    bCtx.stroke();
+                    // Fist
+                    bCtx.beginPath();
+                    bCtx.arc(cx + 22, shoulderY - 33, 5, 0, Math.PI * 2);
+                    bCtx.fill();
+                    // Thumb sticking up
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx + 19, shoulderY - 35);
+                    bCtx.lineTo(cx + 17, shoulderY - 46);
+                    bCtx.lineWidth = 2.5;
+                    bCtx.stroke();
+                    bCtx.lineWidth = 3;
+                    break;
+
+                case 'pointing':
+                    // Pointing up — both arms, one pointing up
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 18, shoulderY + 10);
+                    bCtx.lineTo(cx - 14, shoulderY + 25);
+                    bCtx.stroke();
+                    // Right arm straight up
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 8, shoulderY - 20);
+                    bCtx.lineTo(cx + 6, shoulderY - 50);
+                    bCtx.stroke();
+                    // Pointing finger
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx + 6, shoulderY - 52);
+                    bCtx.lineTo(cx + 5, shoulderY - 62);
+                    bCtx.lineWidth = 2;
+                    bCtx.stroke();
+                    bCtx.lineWidth = 3;
+                    break;
+
+                case 'rock':
+                    // Air guitar! Left hand on neck, right hand strumming
+                    const strum = Math.sin(t * 8) * 8;
+                    // Guitar body (simple)
+                    bCtx.save();
+                    bCtx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
+                    bCtx.lineWidth = 2;
+                    // Guitar neck
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx - 30, shoulderY - 10);
+                    bCtx.lineTo(cx + 10, shoulderY + 25);
+                    bCtx.stroke();
+                    // Guitar body
+                    bCtx.beginPath();
+                    bCtx.ellipse(cx + 15, shoulderY + 30, 18, 12, 0.5, 0, Math.PI * 2);
+                    bCtx.stroke();
+                    bCtx.restore();
+
+                    // Left arm on guitar neck
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 20, shoulderY);
+                    bCtx.lineTo(cx - 25, shoulderY - 5);
+                    bCtx.stroke();
+                    // Right arm strumming
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 15, shoulderY + 15);
+                    bCtx.lineTo(cx + 15 + strum, shoulderY + 28);
+                    bCtx.stroke();
+
+                    // Rock horns on left hand
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx - 25, shoulderY - 7);
+                    bCtx.lineTo(cx - 30, shoulderY - 16);
+                    bCtx.stroke();
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx - 25, shoulderY - 7);
+                    bCtx.lineTo(cx - 20, shoulderY - 16);
+                    bCtx.stroke();
+                    break;
+
+                case 'three':
+                    // Arms open, lovey pose
+                    const heartBeat = Math.sin(t * 3) * 2;
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 25, shoulderY + 5);
+                    bCtx.lineTo(cx - 35, shoulderY - 5 + heartBeat);
+                    bCtx.stroke();
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 25, shoulderY + 5);
+                    bCtx.lineTo(cx + 35, shoulderY - 5 + heartBeat);
+                    bCtx.stroke();
+                    break;
+
+                case 'ok':
+                    // Right hand making OK sign
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 18, shoulderY + 15);
+                    bCtx.lineTo(cx - 14, shoulderY + 28);
+                    bCtx.stroke();
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 22, shoulderY - 8);
+                    bCtx.lineTo(cx + 28, shoulderY - 22);
+                    bCtx.stroke();
+                    // OK circle
+                    bCtx.beginPath();
+                    bCtx.arc(cx + 30, shoulderY - 28, 6, 0, Math.PI * 2);
+                    bCtx.lineWidth = 2;
+                    bCtx.stroke();
+                    bCtx.lineWidth = 3;
+                    // Three fingers up
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx + 28, shoulderY - 33);
+                    bCtx.lineTo(cx + 25, shoulderY - 42);
+                    bCtx.stroke();
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx + 30, shoulderY - 33);
+                    bCtx.lineTo(cx + 30, shoulderY - 44);
+                    bCtx.stroke();
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx + 32, shoulderY - 33);
+                    bCtx.lineTo(cx + 35, shoulderY - 42);
+                    bCtx.stroke();
+                    break;
+
+                default:
+                    // Idle — tapping on glass
+                    const tap = Math.sin(t * 3);
+                    const armX = tap > 0.7 ? cx + 40 + 3 : cx + 40;
+                    // Left arm hanging
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx - 15, shoulderY + 18);
+                    bCtx.lineTo(cx - 10, shoulderY + 32);
+                    bCtx.stroke();
+                    // Right arm reaching toward glass wall
+                    bCtx.beginPath();
+                    bCtx.moveTo(cx, shoulderY);
+                    bCtx.lineTo(cx + 22, shoulderY + 5);
+                    bCtx.lineTo(armX, shoulderY);
+                    bCtx.stroke();
+                    // Small fist
+                    bCtx.beginPath();
+                    bCtx.arc(armX + 2, shoulderY, 3, 0, Math.PI * 2);
+                    bCtx.fill();
+
+                    // Tap ripple on glass
+                    if (tap > 0.7) {
+                        bCtx.save();
+                        bCtx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
+                        bCtx.lineWidth = 1;
+                        const rippleR = (tap - 0.7) * 30;
+                        bCtx.beginPath();
+                        bCtx.arc(armX + 5, shoulderY, rippleR, -0.5, 0.5);
+                        bCtx.stroke();
+                        bCtx.restore();
+                    }
+                    break;
+            }
+        }
+
+        function drawOpenHand(x, y, dir) {
+            bCtx.save();
+            bCtx.lineWidth = 1.5;
+            // Palm
+            bCtx.beginPath();
+            bCtx.arc(x, y, 4, 0, Math.PI * 2);
+            bCtx.stroke();
+            // Fingers (5 short lines radiating up)
+            for (let i = -2; i <= 2; i++) {
+                const angle = -Math.PI / 2 + i * 0.3 * dir;
+                bCtx.beginPath();
+                bCtx.moveTo(x + Math.cos(angle) * 4, y + Math.sin(angle) * 4);
+                bCtx.lineTo(x + Math.cos(angle) * 10, y + Math.sin(angle) * 10);
+                bCtx.stroke();
+            }
+            bCtx.restore();
+        }
+
+        function drawEffects(W, H, gesture, frame) {
+            const t = frame * 0.05;
+            const cx = W / 2;
+
+            bCtx.save();
+
+            if (gesture === 'rock') {
+                // Music notes floating up
+                bCtx.fillStyle = 'rgba(245, 158, 11, 0.6)';
+                bCtx.font = '14px serif';
+                const notes = ['♪', '♫', '♩', '♬'];
+                for (let i = 0; i < 4; i++) {
+                    const nx = cx - 40 + i * 25 + Math.sin(t * 2 + i) * 10;
+                    const ny = H * 0.25 - ((frame + i * 30) % 80);
+                    const alpha = 1 - ((frame + i * 30) % 80) / 80;
+                    bCtx.globalAlpha = alpha * 0.7;
+                    bCtx.fillText(notes[i], nx, ny);
+                }
+            } else if (gesture === 'three') {
+                // Floating hearts
+                bCtx.font = '12px serif';
+                for (let i = 0; i < 5; i++) {
+                    const hx = cx - 30 + i * 16 + Math.sin(t + i * 1.5) * 12;
+                    const hy = H * 0.3 - ((frame + i * 25) % 70);
+                    const alpha = 1 - ((frame + i * 25) % 70) / 70;
+                    bCtx.globalAlpha = alpha * 0.8;
+                    bCtx.fillStyle = '#ec4899';
+                    bCtx.fillText('❤', hx, hy);
+                }
+            } else if (gesture === 'fist') {
+                // Impact lines
+                const flash = Math.sin(t * 8);
+                if (flash > 0.5) {
+                    bCtx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+                    bCtx.lineWidth = 2;
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i / 6) * Math.PI * 2 + t;
+                        const r1 = 25;
+                        const r2 = 35;
+                        bCtx.beginPath();
+                        bCtx.moveTo(cx + 18 + Math.cos(angle) * r1, H * 0.35 + Math.sin(angle) * r1);
+                        bCtx.lineTo(cx + 18 + Math.cos(angle) * r2, H * 0.35 + Math.sin(angle) * r2);
+                        bCtx.stroke();
+                    }
+                }
+            } else if (gesture === 'open-hand') {
+                // Sparkles
+                bCtx.fillStyle = 'rgba(59, 130, 246, 0.5)';
+                bCtx.font = '10px serif';
+                for (let i = 0; i < 6; i++) {
+                    const sx = cx - 40 + Math.random() * 80;
+                    const sy = H * 0.2 + Math.random() * 30;
+                    bCtx.globalAlpha = Math.random() * 0.6;
+                    bCtx.fillText('✦', sx, sy);
+                }
+            }
+
+            bCtx.globalAlpha = 1;
+            bCtx.restore();
+        }
+
+        // Start bottle animation immediately
+        document.addEventListener('DOMContentLoaded', initBottleMan);
+
+        // ============================================
+        // PARTICLES
+        // ============================================
+        function spawnParticles(emoji, count) {
+            const container = document.getElementById('particleContainer');
+            for (let i = 0; i < count; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                p.textContent = emoji;
+                const sx = window.innerWidth / 2 + (Math.random() - 0.5) * 300;
+                const sy = window.innerHeight / 2 + (Math.random() - 0.5) * 150;
+                const dx = (Math.random() - 0.5) * 400;
+                const dy = (Math.random() - 0.5) * 400 - 80;
+                p.style.left = sx + 'px';
+                p.style.top = sy + 'px';
+                p.style.setProperty('--dx', dx + 'px');
+                p.style.setProperty('--dy', dy + 'px');
+                p.style.animationDelay = (Math.random() * 0.3) + 's';
+                container.appendChild(p);
+                setTimeout(() => p.remove(), 2000);
+            }
+        }
+
+        // ============================================
+        // TOAST
+        // ============================================
+        function showToast(message, type = '') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ============================================
+        // MAIN LOOP
+        // ============================================
+
+        function drawLoop() {
+            if (!isRunning) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw mirrored video
+            ctx.save();
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            // Update hand count
+            document.getElementById('handCount').textContent = hands.length;
+
+            if (hands.length > 0) {
+                for (const hand of hands) {
+                    // Mirror x coordinates for drawing
+                    const mirroredKps = hand.keypoints.map(kp => ({
+                        ...kp,
+                        x: canvas.width - kp.x
+                    }));
+                    drawHand(mirroredKps);
+
+                    // Use the original (non-mirrored) keypoints for gesture detection
+                    const gesture = detectGesture(hand.keypoints);
+                    updateFingerStatusUI(gesture.fingers);
+                    updateGestureDisplay(gesture);
+                }
+            }
+
+            requestAnimationFrame(drawLoop);
+        }
+
+        // ============================================
+        // CALLBACK FROM ml5 handPose
+        // ============================================
+        function gotHands(results) {
+            hands = results;
+        }
+
+        // ============================================
+        // START APP
+        // ============================================
+        async function startApp() {
+            const btn = document.getElementById('startBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Starting…';
+
+            const overlay = document.getElementById('loadingOverlay');
+            const placeholder = document.getElementById('cameraPlaceholder');
+            overlay.classList.remove('hidden');
+            placeholder.style.display = 'none';
+
+            try {
+                // Init webcam
+                video = document.getElementById('webcamVideo');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: 'user' }
+                });
+                video.srcObject = stream;
+                await video.play();
+
+                // Setup canvas
+                canvas = document.getElementById('outputCanvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx = canvas.getContext('2d');
+
+                // Update camera status
+                const statusEl = document.getElementById('cameraStatus');
+                statusEl.classList.add('active');
+                statusEl.innerHTML = '<div class="status-dot"></div><span>Live</span>';
+
+                // Load handPose model with ready callback
+                document.getElementById('modelStatusText').textContent = 'Loading…';
+
+                // Show a timer so user knows it's working
+                const loadingText = overlay.querySelector('.loading-text');
+                let elapsed = 0;
+                const loadTimer = setInterval(() => {
+                    elapsed++;
+                    loadingText.textContent = `Loading HandPose model… ${elapsed}s (first load downloads ~15MB, then it's cached)`;
+                }, 1000);
+
+                // Start showing camera feed behind overlay while model loads
+                isRunning = true;
+                drawLoop();
+
+                handPose = ml5.handPose({ flipped: true }, () => {
+                    clearInterval(loadTimer);
+
+                    // Model is ready — start continuous detection
+                    handPose.detectStart(video, gotHands);
+
+                    document.getElementById('modelStatusText').textContent = 'Active ✓';
+                    overlay.classList.add('hidden');
+
+                    // Hide start button
+                    document.getElementById('startBtnWrapper').style.display = 'none';
+
+                    showToast('✅ HandPose model loaded! Show your hand ✋', 'success');
+                });
+
+            } catch (err) {
+                console.error('Startup error:', err);
+                overlay.classList.add('hidden');
+                placeholder.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = '🚀 Start Camera & Model';
+
+                if (err.name === 'NotAllowedError') {
+                    showToast('❌ Camera access denied. Please allow camera permissions.', 'error');
+                } else {
+                    showToast('❌ Error: ' + err.message, 'error');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
