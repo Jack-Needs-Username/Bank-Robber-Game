@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Heist Runner</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0f;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        #gameWrapper {
+            position: relative;
+            border: 2px solid rgba(255, 200, 50, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow:
+                0 0 30px rgba(255, 200, 50, 0.15),
+                0 0 60px rgba(255, 150, 0, 0.08),
+                inset 0 0 30px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #uiOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #scoreDisplay {
+            position: absolute;
+            top: 18px;
+            right: 24px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 18px;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+            z-index: 11;
+        }
+
+        #highScoreDisplay {
+            position: absolute;
+            top: 18px;
+            left: 24px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 11px;
+            color: rgba(255, 215, 0, 0.5);
+            z-index: 11;
+        }
+
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: all;
+            z-index: 20;
+            background: rgba(5, 5, 15, 0.85);
+            backdrop-filter: blur(6px);
+        }
+
+        #gameOverScreen {
+            display: none;
+        }
+
+        .title {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 28px;
+            color: #ffd700;
+            text-shadow:
+                0 0 20px rgba(255, 215, 0, 0.8),
+                0 0 40px rgba(255, 150, 0, 0.4);
+            margin-bottom: 12px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .subtitle {
+            font-family: 'Outfit', sans-serif;
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 40px;
+        }
+
+        .start-btn {
+            pointer-events: all;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 14px;
+            padding: 16px 40px;
+            background: linear-gradient(135deg, #ffd700, #ff8c00);
+            color: #1a0a00;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow:
+                0 0 20px rgba(255, 215, 0, 0.3),
+                0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .start-btn:hover {
+            transform: scale(1.05);
+            box-shadow:
+                0 0 30px rgba(255, 215, 0, 0.5),
+                0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .final-score {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 20px;
+            color: #ffd700;
+            margin: 20px 0 8px;
+        }
+
+        .controls-hint {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.35);
+            margin-top: 20px;
+        }
+
+        .game-over-title {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 22px;
+            color: #ff4444;
+            text-shadow: 0 0 20px rgba(255, 50, 50, 0.6);
+            margin-bottom: 6px;
+        }
+
+        .game-over-sub {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameWrapper">
+        <canvas id="gameCanvas"></canvas>
+        <div id="uiOverlay">
+            <div id="scoreDisplay">0</div>
+            <div id="highScoreDisplay">HI 0</div>
+        </div>
+
+        <div id="startScreen">
+            <div class="title">BANK HEIST<br>RUNNER</div>
+            <div class="subtitle">Don't get caught!</div>
+            <button class="start-btn" id="startBtn">START</button>
+            <div class="controls-hint">SPACE / TAP to Jump</div>
+        </div>
+
+        <div id="gameOverScreen">
+            <div class="game-over-title">BUSTED!</div>
+            <div class="game-over-sub">The cops got you...</div>
+            <div class="final-score" id="finalScore">0</div>
+            <button class="start-btn" id="restartBtn">TRY AGAIN</button>
+            <div class="controls-hint">SPACE / TAP to Restart</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Responsive canvas
+        const W = 900;
+        const H = 400;
+        canvas.width = W;
+        canvas.height = H;
+
+        // Game state
+        let gameState = 'start'; // start, playing, over
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('heistHighScore') || '0');
+        let gameSpeed = 5;
+        let frameCount = 0;
+        let groundY = H - 60;
+
+        // Update high score display
+        document.getElementById('highScoreDisplay').textContent = `HI ${highScore}`;
+
+        // ============== PLAYER ==============
+        const player = {
+            x: 100,
+            y: groundY,
+            w: 30,
+            h: 60,
+            vy: 0,
+            jumping: false,
+            grounded: true,
+            runFrame: 0,
+            runTimer: 0,
+            bagSwing: 0,
+
+            jump() {
+                if (this.grounded) {
+                    this.vy = -15;
+                    this.grounded = false;
+                    this.jumping = true;
+                }
+            },
+
+            update() {
+                // Gravity
+                this.vy += 0.7;
+                this.y += this.vy;
+
+                if (this.y >= groundY) {
+                    this.y = groundY;
+                    this.vy = 0;
+                    this.grounded = true;
+                    this.jumping = false;
+                }
+
+                // Run animation
+                this.runTimer++;
+                if (this.runTimer > 6) {
+                    this.runTimer = 0;
+                    this.runFrame = (this.runFrame + 1) % 4;
+                }
+
+                this.bagSwing = Math.sin(frameCount * 0.15) * 5;
+            },
+
+            draw() {
+                const px = this.x;
+                const py = this.y;
+                ctx.save();
+
+                // --- STICK FIGURE ---
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                // Head
+                ctx.beginPath();
+                ctx.arc(px, py - 50, 8, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Beanie / mask
+                ctx.fillStyle = '#222';
+                ctx.beginPath();
+                ctx.arc(px, py - 53, 8, Math.PI, Math.PI * 2);
+                ctx.fill();
+
+                // Eyes (sneaky)
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(px - 4, py - 52, 3, 2);
+                ctx.fillRect(px + 1, py - 52, 3, 2);
+
+                // Body
+                ctx.beginPath();
+                ctx.moveTo(px, py - 42);
+                ctx.lineTo(px, py - 18);
+                ctx.stroke();
+
+                // Legs - running animation
+                const legAngle1 = Math.sin(this.runFrame * Math.PI / 2) * 25;
+                const legAngle2 = Math.sin((this.runFrame + 2) * Math.PI / 2) * 25;
+
+                if (this.jumping) {
+                    // Tucked legs when jumping
+                    ctx.beginPath();
+                    ctx.moveTo(px, py - 18);
+                    ctx.lineTo(px - 10, py - 10);
+                    ctx.lineTo(px - 5, py - 3);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(px, py - 18);
+                    ctx.lineTo(px + 8, py - 12);
+                    ctx.lineTo(px + 12, py - 5);
+                    ctx.stroke();
+                } else {
+                    // Running legs
+                    const rad1 = legAngle1 * Math.PI / 180;
+                    const rad2 = legAngle2 * Math.PI / 180;
+
+                    ctx.beginPath();
+                    ctx.moveTo(px, py - 18);
+                    ctx.lineTo(px + Math.sin(rad1) * 15, py - 18 + Math.cos(rad1) * 18);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(px, py - 18);
+                    ctx.lineTo(px + Math.sin(rad2) * 15, py - 18 + Math.cos(rad2) * 18);
+                    ctx.stroke();
+                }
+
+                // Arms
+                // Back arm
+                ctx.beginPath();
+                ctx.moveTo(px, py - 38);
+                ctx.lineTo(px - 8, py - 28);
+                ctx.stroke();
+
+                // Front arm holding money bag
+                ctx.beginPath();
+                ctx.moveTo(px, py - 38);
+                ctx.lineTo(px + 12, py - 30 + this.bagSwing * 0.3);
+                ctx.stroke();
+
+                // --- MONEY BAG ---
+                const bagX = px + 14;
+                const bagY = py - 32 + this.bagSwing * 0.5;
+
+                // Bag body
+                ctx.fillStyle = '#8B6914';
+                ctx.beginPath();
+                ctx.ellipse(bagX, bagY + 8, 10, 12, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#6B4F10';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Bag tie
+                ctx.fillStyle = '#6B4F10';
+                ctx.beginPath();
+                ctx.moveTo(bagX - 6, bagY - 2);
+                ctx.lineTo(bagX, bagY - 8);
+                ctx.lineTo(bagX + 6, bagY - 2);
+                ctx.closePath();
+                ctx.fill();
+
+                // Dollar sign
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 12px Outfit';
+                ctx.textAlign = 'center';
+                ctx.fillText('$', bagX, bagY + 12);
+
+                ctx.restore();
+            },
+
+            getBounds() {
+                return {
+                    x: this.x - 10,
+                    y: this.y - 58,
+                    w: 25,
+                    h: 58
+                };
+            }
+        };
+
+        // ============== MONEY PARTICLES ==============
+        const moneyParticles = [];
+
+        function spawnMoney() {
+            const bagX = player.x + 14;
+            const bagY = player.y - 24;
+            moneyParticles.push({
+                x: bagX,
+                y: bagY,
+                vx: -Math.random() * 3 - 1,
+                vy: -Math.random() * 4 - 1,
+                rotation: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 0.2,
+                life: 1,
+                type: Math.random() > 0.4 ? 'bill' : 'coin',
+                size: Math.random() * 4 + 6
+            });
+        }
+
+        function updateMoney() {
+            for (let i = moneyParticles.length - 1; i >= 0; i--) {
+                const m = moneyParticles[i];
+                m.x += m.vx - gameSpeed * 0.5;
+                m.y += m.vy;
+                m.vy += 0.15;
+                m.rotation += m.rotSpeed;
+                m.life -= 0.012;
+
+                if (m.life <= 0 || m.x < -20 || m.y > H) {
+                    moneyParticles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawMoney() {
+            moneyParticles.forEach(m => {
+                ctx.save();
+                ctx.translate(m.x, m.y);
+                ctx.rotate(m.rotation);
+                ctx.globalAlpha = m.life;
+
+                if (m.type === 'bill') {
+                    // Dollar bill
+                    ctx.fillStyle = '#2d8c3c';
+                    ctx.fillRect(-m.size, -m.size * 0.5, m.size * 2, m.size);
+                    ctx.strokeStyle = '#1a5c25';
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeRect(-m.size, -m.size * 0.5, m.size * 2, m.size);
+                    ctx.fillStyle = '#aaffbb';
+                    ctx.font = `${m.size * 0.7}px Outfit`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('$', 0, 1);
+                } else {
+                    // Coin
+                    ctx.fillStyle = '#ffd700';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, m.size * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#cc9900';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            });
+        }
+
+        // ============== OBSTACLES ==============
+        const obstacles = [];
+        let obstacleTimer = 0;
+        let minObstacleGap = 80;
+
+        function spawnObstacle() {
+            const type = Math.random();
+            let obs;
+
+            if (type < 0.35) {
+                // Police barrier
+                obs = {
+                    x: W + 20,
+                    y: groundY,
+                    w: 30,
+                    h: 40,
+                    type: 'barrier'
+                };
+            } else if (type < 0.6) {
+                // Traffic cone
+                obs = {
+                    x: W + 20,
+                    y: groundY,
+                    w: 20,
+                    h: 28,
+                    type: 'cone'
+                };
+            } else if (type < 0.8) {
+                // Hydrant
+                obs = {
+                    x: W + 20,
+                    y: groundY,
+                    w: 22,
+                    h: 35,
+                    type: 'hydrant'
+                };
+            } else {
+                // Police spike strip
+                obs = {
+                    x: W + 20,
+                    y: groundY,
+                    w: 50,
+                    h: 12,
+                    type: 'spikes'
+                };
+            }
+
+            obstacles.push(obs);
+        }
+
+        function updateObstacles() {
+            obstacleTimer++;
+            const gap = Math.max(45, minObstacleGap - score / 50);
+
+            if (obstacleTimer > gap + Math.random() * 40) {
+                spawnObstacle();
+                obstacleTimer = 0;
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].x -= gameSpeed;
+                if (obstacles[i].x < -60) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(obs => {
+                ctx.save();
+                const ox = obs.x;
+                const oy = obs.y;
+
+                if (obs.type === 'barrier') {
+                    // Police sawhorse barrier
+                    ctx.fillStyle = '#ff6600';
+                    ctx.fillRect(ox - 15, oy - 35, 30, 6);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(ox - 15, oy - 35, 10, 6);
+                    ctx.fillRect(ox + 5, oy - 35, 10, 6);
+
+                    // Legs
+                    ctx.strokeStyle = '#888';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(ox - 12, oy - 29);
+                    ctx.lineTo(ox - 8, oy);
+                    ctx.moveTo(ox + 12, oy - 29);
+                    ctx.lineTo(ox + 8, oy);
+                    ctx.stroke();
+
+                    // Cross bar
+                    ctx.fillStyle = '#ff6600';
+                    ctx.fillRect(ox - 13, oy - 22, 26, 4);
+                } else if (obs.type === 'cone') {
+                    // Traffic cone
+                    ctx.fillStyle = '#ff4400';
+                    ctx.beginPath();
+                    ctx.moveTo(ox, oy - 26);
+                    ctx.lineTo(ox - 10, oy);
+                    ctx.lineTo(ox + 10, oy);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // White stripes
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(ox - 6, oy - 16, 12, 3);
+                    ctx.fillRect(ox - 4, oy - 22, 8, 2);
+
+                    // Base
+                    ctx.fillStyle = '#ff4400';
+                    ctx.fillRect(ox - 12, oy - 3, 24, 3);
+                } else if (obs.type === 'hydrant') {
+                    // Fire hydrant
+                    ctx.fillStyle = '#cc2200';
+                    ctx.fillRect(ox - 7, oy - 28, 14, 22);
+
+                    // Top dome
+                    ctx.beginPath();
+                    ctx.arc(ox, oy - 28, 7, Math.PI, 0);
+                    ctx.fill();
+
+                    // Cap
+                    ctx.fillStyle = '#aa1800';
+                    ctx.fillRect(ox - 5, oy - 33, 10, 5);
+
+                    // Side nozzles
+                    ctx.fillRect(ox - 12, oy - 22, 6, 6);
+                    ctx.fillRect(ox + 6, oy - 22, 6, 6);
+
+                    // Base
+                    ctx.fillStyle = '#aa1800';
+                    ctx.fillRect(ox - 9, oy - 8, 18, 8);
+                } else if (obs.type === 'spikes') {
+                    // Spike strip
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(ox - 25, oy - 5, 50, 5);
+
+                    // Spikes
+                    ctx.fillStyle = '#888';
+                    for (let s = -22; s < 25; s += 5) {
+                        ctx.beginPath();
+                        ctx.moveTo(ox + s, oy - 5);
+                        ctx.lineTo(ox + s + 2.5, oy - 12);
+                        ctx.lineTo(ox + s + 5, oy - 5);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                }
+
+                ctx.restore();
+            });
+        }
+
+        // ============== BACKGROUND ==============
+        // City buildings
+        const buildings = [];
+        for (let i = 0; i < 20; i++) {
+            buildings.push({
+                x: i * 80,
+                w: 40 + Math.random() * 50,
+                h: 80 + Math.random() * 120,
+                color: `hsl(${220 + Math.random() * 20}, 15%, ${12 + Math.random() * 8}%)`,
+                windows: Math.floor(Math.random() * 8) + 3
+            });
+        }
+
+        // Stars
+        const stars = [];
+        for (let i = 0; i < 60; i++) {
+            stars.push({
+                x: Math.random() * W,
+                y: Math.random() * (H * 0.4),
+                size: Math.random() * 2 + 0.5,
+                twinkle: Math.random() * Math.PI * 2
+            });
+        }
+
+        let bgOffset = 0;
+
+        function drawBackground() {
+            // Night sky gradient
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+            skyGrad.addColorStop(0, '#0a0a1a');
+            skyGrad.addColorStop(0.4, '#111133');
+            skyGrad.addColorStop(0.7, '#1a1a2e');
+            skyGrad.addColorStop(1, '#16213e');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, W, H);
+
+            // Moon
+            ctx.fillStyle = '#ddd';
+            ctx.beginPath();
+            ctx.arc(W - 100, 60, 30, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ccc';
+            ctx.beginPath();
+            ctx.arc(W - 92, 55, 28, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Stars
+            stars.forEach(s => {
+                s.twinkle += 0.02;
+                const alpha = 0.3 + Math.sin(s.twinkle) * 0.3;
+                ctx.fillStyle = `rgba(255, 255, 200, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Buildings (far)
+            bgOffset += gameSpeed * 0.2;
+            buildings.forEach(b => {
+                let bx = ((b.x - bgOffset * 0.5) % (W + 200));
+                if (bx < -100) bx += W + 200;
+
+                ctx.fillStyle = b.color;
+                ctx.fillRect(bx, groundY - b.h, b.w, b.h);
+
+                // Windows
+                ctx.fillStyle = 'rgba(255, 220, 100, 0.3)';
+                const cols = Math.floor(b.w / 12);
+                const rows = Math.floor(b.h / 20);
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (Math.sin(b.x + r * 7 + c * 13) > 0) {
+                            ctx.fillStyle = `rgba(255, 220, 100, ${0.15 + Math.random() * 0.2})`;
+                            ctx.fillRect(bx + 6 + c * 12, groundY - b.h + 8 + r * 20, 6, 10);
+                        }
+                    }
+                }
+            });
+
+            // Ground
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, groundY, W, H - groundY);
+
+            // Road surface
+            ctx.fillStyle = '#2a2a3e';
+            ctx.fillRect(0, groundY, W, 4);
+
+            // Road dashes
+            ctx.strokeStyle = 'rgba(255, 200, 50, 0.25)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([20, 15]);
+            ctx.lineDashOffset = -bgOffset * 2;
+            ctx.beginPath();
+            ctx.moveTo(0, groundY + 30);
+            ctx.lineTo(W, groundY + 30);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Sidewalk edge
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, groundY - 2, W, 4);
+        }
+
+        // ============== POLICE LIGHTS ==============
+        let policeLightPhase = 0;
+
+        function drawPoliceLights() {
+            policeLightPhase += 0.08;
+
+            // Distant police lights flashing behind
+            const intensity = Math.sin(policeLightPhase) > 0 ? 0.15 : 0.05;
+            const redIntensity = Math.sin(policeLightPhase) > 0 ? 0.15 : 0;
+            const blueIntensity = Math.sin(policeLightPhase) < 0 ? 0.15 : 0;
+
+            // Red glow from left
+            ctx.fillStyle = `rgba(255, 0, 0, ${redIntensity})`;
+            ctx.fillRect(0, 0, 120, H);
+
+            // Blue glow from left
+            ctx.fillStyle = `rgba(0, 100, 255, ${blueIntensity})`;
+            ctx.fillRect(0, 0, 100, H);
+
+            // Small police car silhouette following
+            const carX = 15 + Math.sin(frameCount * 0.02) * 5;
+            ctx.fillStyle = '#111';
+            ctx.fillRect(carX, groundY - 20, 40, 16);
+            ctx.fillRect(carX + 8, groundY - 28, 24, 10);
+
+            // Light bar
+            if (Math.sin(policeLightPhase * 2) > 0) {
+                ctx.fillStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(carX + 14, groundY - 28, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                ctx.beginPath();
+                ctx.arc(carX + 14, groundY - 28, 8, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#4444ff';
+                ctx.beginPath();
+                ctx.arc(carX + 26, groundY - 28, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(50, 50, 255, 0.3)';
+                ctx.beginPath();
+                ctx.arc(carX + 26, groundY - 28, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Wheels
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.arc(carX + 10, groundY - 3, 4, 0, Math.PI * 2);
+            ctx.arc(carX + 34, groundY - 3, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ============== DUST PARTICLES ==============
+        const dustParticles = [];
+
+        function updateDust() {
+            if (player.grounded && frameCount % 3 === 0) {
+                dustParticles.push({
+                    x: player.x - 5,
+                    y: groundY - 2,
+                    vx: -Math.random() * 2 - 1,
+                    vy: -Math.random() * 1.5,
+                    life: 1,
+                    size: Math.random() * 3 + 1
+                });
+            }
+
+            for (let i = dustParticles.length - 1; i >= 0; i--) {
+                const d = dustParticles[i];
+                d.x += d.vx;
+                d.y += d.vy;
+                d.life -= 0.03;
+                if (d.life <= 0) dustParticles.splice(i, 1);
+            }
+        }
+
+        function drawDust() {
+            dustParticles.forEach(d => {
+                ctx.fillStyle = `rgba(150, 140, 120, ${d.life * 0.4})`;
+                ctx.beginPath();
+                ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // ============== COLLISION ==============
+        function checkCollision() {
+            const pb = player.getBounds();
+
+            for (const obs of obstacles) {
+                const obsBounds = {
+                    x: obs.x - obs.w / 2 + 4,
+                    y: obs.y - obs.h + 4,
+                    w: obs.w - 8,
+                    h: obs.h - 4
+                };
+
+                if (pb.x < obsBounds.x + obsBounds.w &&
+                    pb.x + pb.w > obsBounds.x &&
+                    pb.y < obsBounds.y + obsBounds.h &&
+                    pb.y + pb.h > obsBounds.y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ============== GAME LOOP ==============
+        function gameOver() {
+            gameState = 'over';
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('heistHighScore', highScore.toString());
+                document.getElementById('highScoreDisplay').textContent = `HI ${highScore}`;
+            }
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameOverScreen').style.display = 'flex';
+        }
+
+        function startGame() {
+            gameState = 'playing';
+            score = 0;
+            gameSpeed = 5;
+            frameCount = 0;
+            obstacles.length = 0;
+            moneyParticles.length = 0;
+            dustParticles.length = 0;
+            obstacleTimer = 0;
+            player.y = groundY;
+            player.vy = 0;
+            player.grounded = true;
+            player.jumping = false;
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+        }
+
+        function update() {
+            if (gameState !== 'playing') return;
+
+            frameCount++;
+            player.update();
+            updateObstacles();
+            updateMoney();
+            updateDust();
+
+            // Spawn money from bag
+            if (frameCount % 4 === 0) {
+                spawnMoney();
+            }
+
+            // Score
+            if (frameCount % 5 === 0) {
+                score++;
+                document.getElementById('scoreDisplay').textContent = score;
+            }
+
+            // Increase speed
+            gameSpeed = 5 + score / 80;
+            if (gameSpeed > 14) gameSpeed = 14;
+
+            // Check collision
+            if (checkCollision()) {
+                gameOver();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+            drawBackground();
+
+            if (gameState === 'playing' || gameState === 'over') {
+                drawPoliceLights();
+                drawObstacles();
+                drawDust();
+                player.draw();
+                drawMoney();
+            }
+
+            if (gameState === 'start') {
+                // Draw a preview scene
+                drawPoliceLights();
+
+                // Static player preview
+                player.runFrame = Math.floor(frameCount / 10) % 4;
+                player.bagSwing = Math.sin(frameCount * 0.05) * 5;
+                player.draw();
+
+                // Spawn some preview money
+                if (frameCount % 8 === 0) spawnMoney();
+                updateMoney();
+                drawMoney();
+            }
+        }
+
+        function gameLoop() {
+            if (gameState === 'start') frameCount++;
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ============== INPUT ==============
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                if (gameState === 'playing') {
+                    player.jump();
+                } else if (gameState === 'start') {
+                    startGame();
+                } else if (gameState === 'over') {
+                    startGame();
+                }
+            }
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            if (gameState === 'playing') player.jump();
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (gameState === 'playing') player.jump();
+        });
+
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+
+        // Start
+        gameLoop();
+    </script>
+</body>
+</html>

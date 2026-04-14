@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sky Portal – Projector Mapping</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #startBtn {
+            position: absolute;
+            z-index: 100;
+            padding: 18px 48px;
+            font-size: 1.4rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #fff;
+            background: rgba(40, 100, 255, 0.25);
+            border: 2px solid rgba(100, 160, 255, 0.6);
+            border-radius: 12px;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            transition: all 0.3s ease;
+        }
+        #startBtn:hover {
+            background: rgba(40, 100, 255, 0.5);
+            box-shadow: 0 0 30px rgba(80, 140, 255, 0.5);
+            transform: scale(1.05);
+        }
+        #startBtn.hidden { display: none; }
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+        }
+    </style>
+</head>
+<body>
+    <button id="startBtn">Start</button>
+    <canvas id="c"></canvas>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx    = canvas.getContext('2d');
+        const btn    = document.getElementById('startBtn');
+
+        /* ── Sizing ── */
+        let W, H, CX, CY, MAX_SIZE;
+        function resize() {
+            W = canvas.width  = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+            CX = W / 2;
+            CY = H / 2;
+            MAX_SIZE = Math.min(W, H) * 0.85;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        /* ── Timing ── */
+        const GROW_DUR  = 20000;
+        const HOLD_DUR  = 20000;
+        const MORPH_DUR = 4000;
+
+        const START_SIZE = 20;
+
+        /* ── Sky image ── */
+        const skyImg = new Image();
+        skyImg.src = 'sky.png';
+
+        /* ── Easing ── */
+        function easeInOut(t) {
+            return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        }
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        /* ── Organic blob path ──
+           Deforms a circle using layered sine waves */
+        function blobPath(cx, cy, baseR, time, intensity) {
+            const pts = 120;
+            const path = new Path2D();
+            for (let i = 0; i <= pts; i++) {
+                const angle = (i / pts) * Math.PI * 2;
+                /* layer several frequencies for organic feel */
+                const d1 = Math.sin(angle * 3 + time * 0.7)  * 0.08;
+                const d2 = Math.sin(angle * 5 - time * 1.1)  * 0.05;
+                const d3 = Math.sin(angle * 7 + time * 1.6)  * 0.035;
+                const d4 = Math.sin(angle * 2 - time * 0.4)  * 0.06;
+                const d5 = Math.cos(angle * 4 + time * 0.9)  * 0.04;
+                const deform = 1 + (d1 + d2 + d3 + d4 + d5) * intensity;
+                const r = baseR * deform;
+                const x = cx + Math.cos(angle) * r;
+                const y = cy + Math.sin(angle) * r;
+                if (i === 0) path.moveTo(x, y);
+                else path.lineTo(x, y);
+            }
+            path.closePath();
+            return path;
+        }
+
+        /* ── Draw sky onto canvas with panning & darkening ── */
+        function drawSky(shapeSize, darkness, panX, panY) {
+            if (!skyImg.complete) return;
+
+            const imgW = skyImg.naturalWidth;
+            const imgH = skyImg.naturalHeight;
+
+            /* Scale image to cover the shape, then pan */
+            const coverScale = Math.max(shapeSize / imgW, shapeSize / imgH) * 1.6;
+            const dw = imgW * coverScale;
+            const dh = imgH * coverScale;
+            const dx = CX - dw / 2 + panX;
+            const dy = CY - dh / 2 + panY;
+
+            ctx.drawImage(skyImg, dx, dy, dw, dh);
+
+            /* Darken overlay */
+            if (darkness > 0) {
+                ctx.fillStyle = `rgba(0, 0, 10, ${darkness})`;
+                ctx.fillRect(0, 0, W, H);
+            }
+        }
+
+        /* ── Animation state ── */
+        let running  = false;
+        let startT   = 0;
+
+        function frame(now) {
+            if (!running) return;
+            ctx.clearRect(0, 0, W, H);
+
+            const elapsed = now - startT;
+            const time = now / 1000;  // for blob wobble
+
+            /* ── Determine phase ── */
+            let shapeSize, darkness, borderRadius, blobIntensity;
+            let panSpeed;
+
+            if (elapsed < GROW_DUR) {
+                /* Phase 1: Growing */
+                const t = easeInOut(elapsed / GROW_DUR);
+                shapeSize = lerp(START_SIZE, MAX_SIZE, t);
+                darkness  = lerp(0, 0.15, t);
+                borderRadius = 0;
+                blobIntensity = 0;
+                panSpeed = lerp(0.3, 1, t);
+
+            } else if (elapsed < GROW_DUR + HOLD_DUR) {
+                /* Phase 2: Hold – sky darkens progressively */
+                const t = (elapsed - GROW_DUR) / HOLD_DUR;
+                shapeSize = MAX_SIZE;
+                darkness  = lerp(0.15, 0.55, t);
+                borderRadius = 0;
+                blobIntensity = 0;
+                panSpeed = lerp(1, 2.2, t);  // storm picks up
+
+            } else if (elapsed < GROW_DUR + HOLD_DUR + MORPH_DUR) {
+                /* Phase 3: Morph to organic portal */
+                const t = easeInOut((elapsed - GROW_DUR - HOLD_DUR) / MORPH_DUR);
+                shapeSize = MAX_SIZE;
+                darkness  = lerp(0.55, 0.65, t);
+                borderRadius = t;  // 0 → 1  (used to blend from square to blob)
+                blobIntensity = t;
+                panSpeed = 2.2;
+
+            } else {
+                /* Phase 4: Portal active – stays as organic blob */
+                shapeSize = MAX_SIZE;
+                const extraT = Math.min((elapsed - GROW_DUR - HOLD_DUR - MORPH_DUR) / 10000, 1);
+                darkness  = lerp(0.65, 0.75, extraT);
+                borderRadius = 1;
+                blobIntensity = 1;
+                panSpeed = 2.2;
+            }
+
+            /* ── Cloud panning (directional storm movement) ── */
+            const panX = Math.sin(time * 0.12) * 40 * panSpeed + time * 12 * panSpeed;
+            const panY = Math.cos(time * 0.09) * 25 * panSpeed + time * 4 * panSpeed;
+
+            /* ── Build clip shape ── */
+            ctx.save();
+
+            if (borderRadius > 0.01) {
+                /* Organic blob portal */
+                const baseR = shapeSize / 2;
+                const blob = blobPath(CX, CY, baseR, time, blobIntensity);
+
+                if (borderRadius < 1) {
+                    /* Blend: use blob but interpolate toward square */
+                    ctx.clip(blob);
+                } else {
+                    ctx.clip(blob);
+                }
+            } else {
+                /* Square clip */
+                const half = shapeSize / 2;
+                ctx.beginPath();
+                ctx.rect(CX - half, CY - half, shapeSize, shapeSize);
+                ctx.clip();
+            }
+
+            /* ── Fill shape with initial blue tint when small ── */
+            if (elapsed < GROW_DUR) {
+                const t = elapsed / GROW_DUR;
+                /* Draw blue base first */
+                const blueAlpha = 1 - Math.pow(t, 1.2);
+                ctx.fillStyle = `rgba(26, 95, 255, ${blueAlpha})`;
+                ctx.fillRect(0, 0, W, H);
+            }
+
+            /* ── Draw the animated sky ── */
+            drawSky(shapeSize, darkness, panX % (skyImg.naturalWidth || 1000), panY % (skyImg.naturalHeight || 1000));
+
+            /* ── Portal glow ── */
+            if (blobIntensity > 0.01) {
+                const baseR = shapeSize / 2;
+                const glowBlob = blobPath(CX, CY, baseR + 4, time, blobIntensity);
+
+                ctx.restore();
+                ctx.save();
+
+                ctx.strokeStyle = `rgba(120, 180, 255, ${0.4 * blobIntensity})`;
+                ctx.lineWidth = 3;
+                ctx.shadowColor = `rgba(100, 160, 255, ${0.6 * blobIntensity})`;
+                ctx.shadowBlur = 30 * blobIntensity;
+                ctx.stroke(glowBlob);
+
+                ctx.shadowBlur = 60 * blobIntensity;
+                ctx.strokeStyle = `rgba(80, 140, 255, ${0.2 * blobIntensity})`;
+                ctx.stroke(glowBlob);
+
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
+            }
+
+            ctx.restore();
+            requestAnimationFrame(frame);
+        }
+
+        /* ── Start ── */
+        btn.addEventListener('click', () => {
+            btn.classList.add('hidden');
+            running = true;
+            startT = performance.now();
+            requestAnimationFrame(frame);
+        });
+    </script>
+</body>
+</html>
